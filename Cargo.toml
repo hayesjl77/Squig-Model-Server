@@ -1,0 +1,65 @@
+[package]
+name = "squig-model-server"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance local LLM model server with web dashboard"
+license = "MIT"
+
+[[bin]]
+name = "squig-model-server"
+path = "src/main.rs"
+
+[lib]
+name = "squig_model_server"
+path = "src/lib.rs"
+
+[dependencies]
+# Web framework
+axum = { version = "0.8", features = ["ws", "macros"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "fs", "trace", "compression-gzip"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+tokio-util = "0.7"
+futures = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# HTTP client (for proxying to llama.cpp + model downloads)
+reqwest = { version = "0.12", features = ["json", "stream"] }
+
+# Logging & tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Utilities
+async-stream = "0.3"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+dashmap = "6"
+parking_lot = "0.12"
+bytes = "1"
+rust-embed = { version = "8", features = ["compression"] }
+mime_guess = "2"
+sysinfo = "0.32"
+indicatif = "0.17"
+colored = "2"
+open = "5"
+dirs = "6"
+which = "7"
+urlencoding = "2"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true

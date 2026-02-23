@@ -1,0 +1,62 @@
+[server]
+host = "127.0.0.1"
+port = 9090
+max_concurrent_requests = 16
+api_key = ""
+
+[models]
+# Directories to scan for GGUF model files
+# Add as many as you need - subdirectories are scanned recursively
+directories = [
+    "/home/hayesjl77/.squig-models",
+    # "/mnt/models",
+    # "C:\\Users\\you\\models",
+]
+
+# Model to auto-load on startup (filename or partial match)
+# Leave empty to not auto-load
+default_model = "qwen2.5-3b-instruct-q4_k_m"
+
+# Maximum number of models loaded simultaneously
+# Each model runs its own llama-server process
+max_loaded_models = 2
+
+[inference]
+# GPU layers to offload (-1 = all layers, 0 = CPU only)
+gpu_layers = -1
+
+# Context window size in tokens
+context_size = 32768
+
+# Number of parallel request slots (continuous batching)
+# Higher = more concurrent requests, but more memory
+parallel_slots = 4
+
+# Flash attention (reduces KV cache memory usage)
+flash_attention = true
+
+# Continuous batching
+continuous_batching = true
+
+# GPU backend: "auto", "vulkan", "cuda", "rocm", "cpu"
+# "auto" will detect your hardware and pick the best option
+gpu_backend = "vulkan"
+
+# KV cache quantization: "f16", "q8_0", "q4_0"
+# q8_0 saves ~50% KV memory vs f16 with minimal quality loss
+kv_cache_type = "q8_0"
+
+# Path to llama-server binary (leave empty for auto-detection)
+llama_server_path = "/mnt/Apps/Squig AI 2026/llama.cpp/build/bin/llama-server"
+
+[inference.speculative]
+# Speculative decoding uses a small "draft" model to predict tokens,
+# then the main model verifies them in parallel. Can give 2-3x speedup.
+enabled = false
+
+# Path to small draft model GGUF file
+draft_model = ""
+
+# Max/min tokens to draft per step
+draft_max = 16
+draft_min = 4

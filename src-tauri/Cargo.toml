@@ -1,0 +1,32 @@
+[package]
+name = "squig-model-server-desktop"
+version = "0.1.0"
+description = "Squig Model Server - Desktop App"
+authors = ["hayesjl77"]
+license = "MIT"
+edition = "2021"
+
+[lib]
+name = "squig_model_server_desktop"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri
+tauri = { version = "2", features = [] }
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Our server library
+squig_model_server = { path = ".." }
