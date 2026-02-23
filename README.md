@@ -1,11 +1,13 @@
 # Squig Model Server
 
-> High-performance local LLM model server with a web dashboard. Single binary, cross-platform (Linux & Windows), OpenAI-compatible API.
+> Standalone desktop application for running local LLMs — similar to LM Studio. Single binary, cross-platform (Linux & Windows), built-in model management, and an OpenAI-compatible API.
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────┐
+│  Tauri 2 Desktop Shell (native window)           │
+├──────────────────────────────────────────────────┤
 │  Svelte Dashboard UI (embedded in binary)        │
 │  Model management, chat, hardware monitor        │
 ├──────────────────────────────────────────────────┤
@@ -63,7 +65,7 @@ mkdir -p ~/.squig-models
 # 3. Run the server
 ./target/release/squig-model-server
 
-# Dashboard opens at http://127.0.0.1:9090
+# The desktop app opens automatically.
 # API available at  http://127.0.0.1:9090/v1
 ```
 
@@ -153,19 +155,19 @@ for chunk in response:
 
 ## Key Features
 
-| Feature                     | Description                                         |
-| --------------------------- | --------------------------------------------------- |
-| **Single binary**           | UI embedded in the Rust executable via `rust-embed` |
-| **Cross-platform**          | Compiles + runs on Linux and Windows                |
-| **OpenAI-compatible**       | Drop-in replacement for OpenAI API                  |
-| **Multi-model**             | Load/unload multiple models simultaneously          |
-| **Continuous batching**     | Serve N concurrent requests per model               |
-| **Speculative decoding**    | 2-3x faster with draft model acceleration           |
-| **Flash attention**         | Reduced KV cache memory usage                       |
-| **KV cache quantization**   | Further memory savings (q8_0, q4_0)                 |
-| **Auto hardware detection** | Detects GPU and recommends optimal backend          |
-| **Live dashboard**          | Real-time metrics, model management, built-in chat  |
-| **SSE streaming**           | Token-by-token streaming responses                  |
+| Feature                     | Description                                             |
+| --------------------------- | ------------------------------------------------------- |
+| **Standalone desktop app**  | Native window via Tauri 2, UI embedded via `rust-embed` |
+| **Cross-platform**          | Compiles + runs on Linux and Windows                    |
+| **OpenAI-compatible**       | Drop-in replacement for OpenAI API                      |
+| **Multi-model**             | Load/unload multiple models simultaneously              |
+| **Continuous batching**     | Serve N concurrent requests per model                   |
+| **Speculative decoding**    | 2-3x faster with draft model acceleration               |
+| **Flash attention**         | Reduced KV cache memory usage                           |
+| **KV cache quantization**   | Further memory savings (q8_0, q4_0)                     |
+| **Auto hardware detection** | Detects GPU and recommends optimal backend              |
+| **Built-in dashboard**      | Real-time metrics, model management, built-in chat      |
+| **SSE streaming**           | Token-by-token streaming responses                      |
 
 ## Optimal Settings for Ryzen AI Max+ 395 (128GB)
 
@@ -203,8 +205,16 @@ npm run dev
 
 ```
 squig-model-server/
-├── Cargo.toml              # Rust dependencies
+├── Cargo.toml              # Rust library + CLI binary
 ├── config.toml             # Server configuration
+├── src-tauri/              # Tauri 2 desktop wrapper
+│   ├── Cargo.toml
+│   ├── tauri.conf.json     # Window config, app metadata
+│   ├── src/
+│   │   ├── lib.rs          # Spawns Axum backend, configures Tauri
+│   │   └── main.rs         # Windows subsystem entry
+│   └── splash/
+│       └── index.html      # Loading screen while backend starts
 ├── src/
 │   ├── main.rs             # Entry point, CLI args
 │   ├── config.rs           # Configuration loading/defaults
@@ -246,4 +256,4 @@ squig-model-server/
 
 ## License
 
-MIT
+MIT — Copyright (c) 2026 Squig-AI

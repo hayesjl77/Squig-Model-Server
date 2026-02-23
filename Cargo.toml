@@ -2,7 +2,7 @@
 name = "squig-model-server"
 version = "0.1.0"
 edition = "2021"
-description = "High-performance local LLM model server with web dashboard"
+description = "Standalone desktop app for running local LLMs with built-in model management and OpenAI-compatible API"
 license = "MIT"
 
 [[bin]]

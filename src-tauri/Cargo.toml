@@ -2,7 +2,7 @@
 name = "squig-model-server-desktop"
 version = "0.1.0"
 description = "Squig Model Server - Desktop App"
-authors = ["hayesjl77"]
+authors = ["Squig-AI"]
 license = "MIT"
 edition = "2021"
 
