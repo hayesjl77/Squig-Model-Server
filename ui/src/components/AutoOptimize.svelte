@@ -154,8 +154,12 @@
         <span class="sc-value">{settings.flash_attention ? '✅' : '❌'}</span>
       </div>
       <div class="setting-chip">
-        <span class="sc-label">KV Cache</span>
-        <span class="sc-value">{settings.kv_cache_type}</span>
+        <span class="sc-label">KV Cache K</span>
+        <span class="sc-value">{settings.kv_cache_type_k}</span>
+      </div>
+      <div class="setting-chip">
+        <span class="sc-label">KV Cache V</span>
+        <span class="sc-value">{settings.kv_cache_type_v}</span>
       </div>
       <div class="setting-chip">
         <span class="sc-label">Backend</span>

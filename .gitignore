@@ -25,3 +25,10 @@ Thumbs.db
 *.deb
 *.msi
 *.exe
+
+# Tauri generated
+src-tauri/gen/
+
+# PostScript artifacts
+os
+src-tauri/icons/os

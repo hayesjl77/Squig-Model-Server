@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -49,12 +50,89 @@ pub struct InferenceSettings {
     /// Speculative decoding settings
     pub speculative: SpeculativeSettings,
 
-    /// KV cache quantization type: "f16", "q8_0", "q4_0"
-    pub kv_cache_type: String,
+    /// KV cache quantization type for Keys: "f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"
+    pub kv_cache_type_k: String,
+
+    /// KV cache quantization type for Values: "f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"
+    pub kv_cache_type_v: String,
+
+    /// CPU threads for generation (-1 = auto)
+    #[serde(default = "default_neg_one_i32")]
+    pub threads: i32,
+
+    /// CPU threads for batch/prompt processing (-1 = same as threads)
+    #[serde(default = "default_neg_one_i32")]
+    pub threads_batch: i32,
+
+    /// Logical batch size for prompt processing (default: 2048)
+    #[serde(default = "default_batch_size")]
+    pub batch_size: usize,
+
+    /// Physical batch size (default: 512)
+    #[serde(default = "default_ubatch_size")]
+    pub ubatch_size: usize,
+
+    /// Force model to stay in RAM (no swap)
+    #[serde(default)]
+    pub mlock: bool,
+
+    /// Disable memory-mapped model loading
+    #[serde(default)]
+    pub no_mmap: bool,
+
+    /// Default max tokens to predict per request (-1 = infinity)
+    #[serde(default = "default_neg_one_i32")]
+    pub n_predict: i32,
+
+    /// RoPE frequency scaling method: "", "none", "linear", "yarn"
+    #[serde(default)]
+    pub rope_scaling: String,
+
+    /// RoPE base frequency (0.0 = use model default)
+    #[serde(default)]
+    pub rope_freq_base: f64,
+
+    /// RoPE frequency scale (0.0 = use model default)
+    #[serde(default)]
+    pub rope_freq_scale: f64,
+
+    /// Multi-GPU split mode: "none", "layer", "row"
+    #[serde(default = "default_split_mode")]
+    pub split_mode: String,
+
+    /// Main GPU index for split_mode=none or KV with split_mode=row
+    #[serde(default)]
+    pub main_gpu: i32,
+
+    /// Tensor split ratios across GPUs (comma-separated, e.g. "3,1")
+    #[serde(default)]
+    pub tensor_split: String,
+
+    /// Enable prompt caching (reuse KV cache across requests)
+    #[serde(default = "default_true")]
+    pub cache_prompt: bool,
+
+    /// Perform warmup run on model load
+    #[serde(default = "default_true")]
+    pub warmup: bool,
 
     /// Path to llama.cpp server binary (auto-detected if empty)
+    /// DEPRECATED: Use backend_paths instead. Kept for backwards compatibility.
+    #[serde(default)]
     pub llama_server_path: String,
+
+    /// Per-backend paths to llama-server binaries
+    /// Keys: "vulkan", "cuda", "rocm", "cpu"
+    /// Values: absolute paths to the respective llama-server binary
+    #[serde(default)]
+    pub backend_paths: HashMap<String, String>,
 }
+
+fn default_neg_one_i32() -> i32 { -1 }
+fn default_batch_size() -> usize { 2048 }
+fn default_ubatch_size() -> usize { 512 }
+fn default_split_mode() -> String { "layer".to_string() }
+fn default_true() -> bool { true }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpeculativeSettings {
@@ -76,7 +154,7 @@ impl Default for ServerConfig {
 
         Self {
             server: ServerSettings {
-                host: "127.0.0.1".to_string(),
+                host: "0.0.0.0".to_string(),
                 port: 9090,
                 max_concurrent_requests: 16,
                 api_key: String::new(),
@@ -99,8 +177,25 @@ impl Default for ServerConfig {
                     draft_max: 16,
                     draft_min: 4,
                 },
-                kv_cache_type: "q8_0".to_string(),
+                kv_cache_type_k: "q8_0".to_string(),
+                kv_cache_type_v: "q8_0".to_string(),
+                threads: -1,
+                threads_batch: -1,
+                batch_size: 2048,
+                ubatch_size: 512,
+                mlock: false,
+                no_mmap: false,
+                n_predict: -1,
+                rope_scaling: String::new(),
+                rope_freq_base: 0.0,
+                rope_freq_scale: 0.0,
+                split_mode: "layer".to_string(),
+                main_gpu: 0,
+                tensor_split: String::new(),
+                cache_prompt: true,
+                warmup: true,
                 llama_server_path: String::new(),
+                backend_paths: HashMap::new(),
             },
         }
     }

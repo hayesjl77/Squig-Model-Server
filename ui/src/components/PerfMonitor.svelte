@@ -6,6 +6,7 @@
   let analysis = $state(null);
   let samples = $state([]);
   let loading = $state(true);
+  let error = $state(null);
   let autoRefresh = $state(true);
 
   async function refresh() {
@@ -16,7 +17,11 @@
       ]);
       analysis = a;
       samples = s.samples || [];
-    } catch (_) {}
+      error = null;
+    } catch (e) {
+      console.error('PerfMonitor fetch error:', e);
+      error = e.message || 'Failed to fetch performance data';
+    }
     loading = false;
   }
 
@@ -61,9 +66,22 @@
 <div class="perf-monitor">
   {#if loading}
     <div class="loading-state">Analyzing performance...</div>
-  {:else if !analysis || !analysis.overall_rating}
+  {:else if error}
+    <div class="empty-state">
+      <p>⚠️ {error}</p>
+      <button onclick={refresh} class="btn-sm" style="margin-top:0.5rem">↻ Retry</button>
+    </div>
+  {:else if !analysis || !analysis.total_requests_analyzed}
     <div class="empty-state">
       <p>No performance data yet. Send some chat requests and come back to see analysis here.</p>
+      {#if analysis?.suggestions?.length}
+        <div class="suggestions-section" style="margin-top:1rem; text-align:left;">
+          <h3>💡 Suggestions</h3>
+          {#each analysis.suggestions as sug}
+            <p style="color:#888; font-size:0.85rem; margin-top:0.3rem;">{sug.description}</p>
+          {/each}
+        </div>
+      {/if}
     </div>
   {:else}
     {@const rs = ratingStyle(analysis.overall_rating)}
@@ -78,8 +96,8 @@
         </div>
       </div>
       <div class="rating-meta">
-        <span class="trend">{trendIcon(analysis.trend)} {analysis.trend}</span>
-        {#if analysis.bottleneck}
+        <span class="trend">{trendIcon(analysis.recent_trend)} {analysis.recent_trend || 'stable'}</span>
+        {#if analysis.bottleneck && analysis.bottleneck !== 'none'}
           <span class="bottleneck">Bottleneck: <strong>{analysis.bottleneck}</strong></span>
         {/if}
       </div>
@@ -155,10 +173,10 @@
             <div class="sample-row">
               <span class="s-time">{new Date(s.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
               <span class="s-model">{s.model || '-'}</span>
-              <span class="s-tps" style="color:{s.tps >= 20 ? '#6ee7b7' : s.tps >= 10 ? '#fbbf24' : '#f87171'}">{s.tps.toFixed(1)}</span>
+              <span class="s-tps" style="color:{s.tokens_per_second >= 20 ? '#6ee7b7' : s.tokens_per_second >= 10 ? '#fbbf24' : '#f87171'}">{s.tokens_per_second.toFixed(1)}</span>
               <span class="s-tok">{s.prompt_tokens}→{s.completion_tokens}</span>
               <span class="s-dur">{s.duration_ms}ms</span>
-              <span class="s-ttft">{s.ttft_ms ? s.ttft_ms + 'ms' : '-'}</span>
+              <span class="s-ttft">{s.time_to_first_token_ms ? s.time_to_first_token_ms + 'ms' : '-'}</span>
             </div>
           {/each}
         </div>

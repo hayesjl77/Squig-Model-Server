@@ -1,5 +1,5 @@
 [server]
-host = "127.0.0.1"
+host = "0.0.0.0"
 port = 9090
 max_concurrent_requests = 16
 api_key = ""
@@ -42,12 +42,69 @@ continuous_batching = true
 # "auto" will detect your hardware and pick the best option
 gpu_backend = "vulkan"
 
-# KV cache quantization: "f16", "q8_0", "q4_0"
-# q8_0 saves ~50% KV memory vs f16 with minimal quality loss
-kv_cache_type = "q8_0"
+# KV cache quantization for Keys (-ctk): "f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"
+# This is independent of model weight quantization — only affects the key/value cache during generation.
+# q8_0 saves ~50% KV memory vs f16 with minimal quality loss.
+kv_cache_type_k = "q8_0"
 
-# Path to llama-server binary (leave empty for auto-detection)
-llama_server_path = "/mnt/Apps/Squig AI 2026/llama.cpp/build/bin/llama-server"
+# KV cache quantization for Values (-ctv): same options as above
+# You can set V to a lower quant than K for extra VRAM savings with almost no quality loss.
+kv_cache_type_v = "q8_0"
+
+# CPU threads for generation (-1 = auto-detect)
+threads = -1
+
+# CPU threads for batch/prompt processing (-1 = same as threads)
+threads_batch = -1
+
+# Logical batch size for prompt processing
+batch_size = 2048
+
+# Physical batch size
+ubatch_size = 512
+
+# Force model to stay in RAM (prevents swap/compress)
+mlock = false
+
+# Disable memory-mapped model loading (slower load, but may reduce pageouts)
+no_mmap = false
+
+# Default max tokens to predict per request (-1 = infinity)
+n_predict = -1
+
+# RoPE frequency scaling: "", "none", "linear", "yarn"
+rope_scaling = ""
+
+# RoPE base frequency (0 = use model default)
+rope_freq_base = 0.0
+
+# RoPE frequency scale (0 = use model default)
+rope_freq_scale = 0.0
+
+# Multi-GPU split mode: "none", "layer", "row"
+split_mode = "layer"
+
+# Main GPU index (for split_mode = none, or KV with split_mode = row)
+main_gpu = 0
+
+# Tensor split ratios across GPUs (comma-separated, e.g. "3,1")
+tensor_split = ""
+
+# Enable prompt caching (reuse KV cache across requests)
+cache_prompt = true
+
+# Perform warmup run on model load
+warmup = true
+
+# Path to llama-server binary (legacy; prefer backend_paths below)
+llama_server_path = ""
+
+# Per-backend llama-server binary paths
+# Each backend gets its own build of llama.cpp compiled with the
+# appropriate GPU acceleration flag.
+[inference.backend_paths]
+vulkan = "/mnt/Apps/Squig AI 2026/llama.cpp/build/bin/llama-server"
+cuda = "/mnt/Apps/Squig AI 2026/llama.cpp/build-cuda/bin/llama-server"
 
 [inference.speculative]
 # Speculative decoding uses a small "draft" model to predict tokens,

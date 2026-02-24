@@ -108,9 +108,10 @@ impl HfClient {
 
     /// Search HuggingFace for GGUF model repos.
     /// Uses the HF Hub API: GET /api/models?search=<query>&filter=gguf&sort=downloads&direction=-1
+    /// Then fetches the file tree for each repo in parallel to get accurate file sizes.
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<HfSearchResult>> {
         let url = format!(
-            "https://huggingface.co/api/models?search={}&filter=gguf&sort=downloads&direction=-1&limit={}",
+            "https://huggingface.co/api/models?search={}&filter=gguf&sort=downloads&direction=-1&limit={}&expand[]=siblings&expand[]=lastModified",
             urlencoding::encode(query),
             limit.min(50)
         );
@@ -124,27 +125,56 @@ impl HfClient {
 
         let items: Vec<HfModelApiResponse> = resp.json().await?;
 
-        let mut results = Vec::with_capacity(items.len());
+        // Phase 1: Identify repos that contain GGUF files (filenames only from search)
+        let mut candidates: Vec<(HfModelApiResponse, Vec<String>)> = Vec::new();
         for item in items {
-            // Filter to repos that actually contain GGUF files in their siblings
-            let gguf_files: Vec<HfGgufFile> = item
+            let gguf_names: Vec<String> = item
                 .siblings
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .filter(|s| s.rfilename.to_lowercase().ends_with(".gguf"))
+                .map(|s| s.rfilename.clone())
+                .collect();
+
+            if !gguf_names.is_empty() {
+                candidates.push((item, gguf_names));
+            }
+        }
+
+        if candidates.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Phase 2: Fetch file trees in parallel to get accurate sizes
+        let tree_futures: Vec<_> = candidates
+            .iter()
+            .map(|(item, _)| self.fetch_repo_tree(&item.id))
+            .collect();
+        let tree_results = futures::future::join_all(tree_futures).await;
+
+        // Phase 3: Merge size data and build results
+        let mut results = Vec::with_capacity(candidates.len());
+        for ((item, gguf_names), tree_result) in candidates.into_iter().zip(tree_results) {
+            // Build a size lookup from tree data
+            let size_map: std::collections::HashMap<String, u64> = tree_result
                 .unwrap_or_default()
                 .into_iter()
-                .filter(|s| s.rfilename.to_lowercase().ends_with(".gguf"))
-                .map(|s| {
-                    let size = s.size.unwrap_or(0);
+                .filter(|f| f.path.to_lowercase().ends_with(".gguf"))
+                .map(|f| (f.path, f.size))
+                .collect();
+
+            let gguf_files: Vec<HfGgufFile> = gguf_names
+                .into_iter()
+                .map(|name| {
+                    let size = size_map.get(&name).copied().unwrap_or(0);
                     HfGgufFile {
-                        filename: s.rfilename,
                         size,
                         size_human: format_bytes(size),
+                        filename: name,
                     }
                 })
                 .collect();
-
-            if gguf_files.is_empty() {
-                continue; // Skip repos with no GGUF files
-            }
 
             results.push(HfSearchResult {
                 repo_id: item.id,
@@ -157,6 +187,22 @@ impl HfClient {
         }
 
         Ok(results)
+    }
+
+    /// Fetch the file tree for a HuggingFace repo (recursive) to get sizes.
+    async fn fetch_repo_tree(&self, repo_id: &str) -> Result<Vec<HfTreeFile>> {
+        // Do NOT url-encode repo_id — it contains a slash (e.g. "org/model")
+        // that must remain literal in the URL path.
+        let url = format!(
+            "https://huggingface.co/api/models/{}/tree/main?recursive=true",
+            repo_id
+        );
+        let resp = self.http.get(&url).send().await?;
+        if !resp.status().is_success() {
+            bail!("Tree fetch failed for {}: {}", repo_id, resp.status());
+        }
+        let files: Vec<HfTreeFile> = resp.json().await?;
+        Ok(files)
     }
 
     /// Start downloading a GGUF file from HuggingFace.
@@ -244,8 +290,15 @@ impl HfClient {
         // Ensure destination directory exists
         tokio::fs::create_dir_all(dest_dir).await?;
 
-        let dest_path = dest_dir.join(filename);
-        let temp_path = dest_dir.join(format!("{}.downloading", filename));
+        // Flatten any subdirectory in the filename (e.g. "Q4_1/model.gguf" -> "model.gguf")
+        // HuggingFace repos sometimes nest GGUF files in quantization subdirectories.
+        let flat_filename = Path::new(filename)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or(filename);
+
+        let dest_path = dest_dir.join(flat_filename);
+        let temp_path = dest_dir.join(format!("{}.downloading", flat_filename));
 
         let mut file = tokio::fs::File::create(&temp_path).await?;
         let mut stream = resp.bytes_stream();
@@ -322,9 +375,18 @@ struct HfModelApiResponse {
 
 /// A file within a HuggingFace model repo
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct HfSibling {
     rfilename: String,
     size: Option<u64>,
+}
+
+/// A file entry from the HuggingFace tree API (includes size)
+#[derive(Debug, Deserialize)]
+struct HfTreeFile {
+    path: String,
+    #[serde(default)]
+    size: u64,
 }
 
 fn download_key(repo_id: &str, filename: &str) -> String {

@@ -29,6 +29,9 @@ pub struct AppState {
 pub async fn run(config: ServerConfig, open_browser: bool) -> Result<()> {
     let bind_addr = format!("{}:{}", config.server.host, config.server.port);
 
+    // Kill any orphaned llama-server processes from previous runs
+    InferenceManager::kill_orphan_llama_servers();
+
     // Initialize model registry - scans for available models
     let model_registry = Arc::new(ModelRegistry::new(&config.models).await?);
     tracing::info!(
@@ -78,6 +81,9 @@ pub async fn run(config: ServerConfig, open_browser: bool) -> Result<()> {
         start_time: chrono::Utc::now(),
     };
 
+    // Keep a handle for graceful shutdown before state is moved
+    let shutdown_manager = state.inference_manager.clone();
+
     // Build router
     let app = Router::new()
         // OpenAI-compatible API routes
@@ -102,7 +108,31 @@ pub async fn run(config: ServerConfig, open_browser: bool) -> Result<()> {
 
     tracing::info!("Server listening on {}", bind_addr);
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
-    axum::serve(listener, app).await?;
+
+    // Graceful shutdown: listen for SIGTERM / Ctrl-C
+    let shutdown_signal = async move {
+        let ctrl_c = tokio::signal::ctrl_c();
+        #[cfg(unix)]
+        {
+            let mut sigterm =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .expect("Failed to install SIGTERM handler");
+            tokio::select! {
+                _ = ctrl_c => {},
+                _ = sigterm.recv() => {},
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            ctrl_c.await.ok();
+        }
+        tracing::info!("Shutdown signal received — killing all llama-server processes...");
+        shutdown_manager.shutdown_all().await;
+    };
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal)
+        .await?;
 
     Ok(())
 }

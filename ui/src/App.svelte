@@ -3,11 +3,13 @@
   import { api } from './lib/api.js';
   import ModelCard from './components/ModelCard.svelte';
   import HardwarePanel from './components/HardwarePanel.svelte';
+  import ServerPanel from './components/ServerPanel.svelte';
   import MetricsPanel from './components/MetricsPanel.svelte';
   import ChatPanel from './components/ChatPanel.svelte';
   import HFSearchPanel from './components/HFSearchPanel.svelte';
   import DevPanel from './components/DevPanel.svelte';
   import PerfMonitor from './components/PerfMonitor.svelte';
+  import HelpGuide from './components/HelpGuide.svelte';
 
   let status = $state(null);
   let availableModels = $state([]);
@@ -58,6 +60,15 @@
     }
   }
 
+  async function deleteModel(name) {
+    try {
+      await api.deleteModel(name);
+      await refresh();
+    } catch (e) {
+      error = `Failed to delete model: ${e.message}`;
+    }
+  }
+
   function formatUptime(seconds) {
     if (!seconds) return '-';
     const h = Math.floor(seconds / 3600);
@@ -88,6 +99,7 @@
       <button class:active={activeTab === 'chat'} onclick={() => activeTab = 'chat'}>Chat</button>
       <button class:active={activeTab === 'developer'} onclick={() => activeTab = 'developer'}>🔧 Developer</button>
       <button class:active={activeTab === 'performance'} onclick={() => activeTab = 'performance'}>📊 Performance</button>
+      <button class:active={activeTab === 'help'} onclick={() => activeTab = 'help'}>📖 Guide</button>
     </nav>
     <div class="status-badge" class:online={status}>
       {status ? 'Online' : 'Connecting...'}
@@ -135,6 +147,7 @@
         </div>
 
         <HardwarePanel {hardware} />
+        <ServerPanel />
         <MetricsPanel {metrics} />
 
         <div class="card loaded-models-card">
@@ -167,6 +180,7 @@
               isLoaded={loadedModels.some(m => m.name === model.name)}
               onLoad={() => loadModel(model.name)}
               onUnload={() => unloadModel(model.name)}
+              onDelete={() => deleteModel(model.name)}
             />
           {/each}
         {/if}
@@ -175,14 +189,21 @@
     {:else if activeTab === 'huggingface'}
       <HFSearchPanel />
 
-    {:else if activeTab === 'chat'}
-      <ChatPanel {loadedModels} />
+    {/if}
 
-    {:else if activeTab === 'developer'}
+    <!-- Chat stays mounted so state persists across tab switches -->
+    <div class="tab-persist" class:tab-hidden={activeTab !== 'chat'}>
+      <ChatPanel {loadedModels} />
+    </div>
+
+    {#if activeTab === 'developer'}
       <DevPanel />
 
     {:else if activeTab === 'performance'}
       <PerfMonitor />
+
+    {:else if activeTab === 'help'}
+      <HelpGuide />
     {/if}
   </main>
 </div>
@@ -194,6 +215,17 @@
     background: #080810;
     color: #e0e0e8;
     line-height: 1.5;
+  }
+  :global(select) {
+    background: #1a1a2e;
+    color: #e0e0e8;
+    border: 1px solid #2a2a40;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  :global(select option) {
+    background: #1a1a2e;
+    color: #e0e0e8;
   }
 
   .app { min-height: 100vh; }
@@ -331,6 +363,8 @@
   }
   .btn-danger { background: #4a1a1a; color: #f87171; }
   .btn-danger:hover { background: #5a2020; }
+
+  .tab-hidden { display: none; }
 
   .empty-state { text-align: center; padding: 3rem; }
   .empty-state p { color: #666; margin-top: 0.5rem; }

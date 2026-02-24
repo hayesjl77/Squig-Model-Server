@@ -1,32 +1,15 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
   "productName": "Squig Model Server",
   "version": "0.1.0",
   "identifier": "com.squig.model-server",
   "build": {
     "frontendDist": "./splash",
-    "devUrl": "http://localhost:5173",
     "beforeDevCommand": "",
     "beforeBuildCommand": ""
   },
   "app": {
     "withGlobalTauri": true,
-    "windows": [
-      {
-        "title": "Squig Model Server",
-        "width": 1400,
-        "height": 900,
-        "minWidth": 1024,
-        "minHeight": 700,
-        "resizable": true,
-        "fullscreen": false,
-        "decorations": true,
-        "transparent": false,
-        "theme": "Dark",
-        "center": true,
-        "maximizable": true
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null,
       "capabilities": [
@@ -34,7 +17,7 @@
           "identifier": "main-capability",
           "description": "Main window capabilities",
           "windows": ["main"],
-          "permissions": ["core:default", "process:default"]
+          "permissions": ["core:default", "process:default", "opener:default"]
         }
       ]
     }

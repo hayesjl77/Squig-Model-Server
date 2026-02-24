@@ -233,16 +233,16 @@ impl RequestLogger {
         }
 
         // KV cache quantization
-        if config.kv_cache_type == "f16" {
+        if config.kv_cache_type_k == "f16" && config.kv_cache_type_v == "f16" {
             suggestions.push(PerformanceSuggestion {
                 severity: "medium".to_string(),
                 category: "Memory".to_string(),
                 title: "Use quantized KV cache".to_string(),
                 description: format!(
-                    "Your KV cache is using f16. Switching to q8_0 halves KV cache memory with minimal quality loss, or q4_0 for 4x reduction. Current context size: {} tokens.",
+                    "Your KV cache (K and V) is using f16. Switching to q8_0 halves KV cache memory with minimal quality loss, or q4_0 for 4x reduction. Current context size: {} tokens.",
                     config.context_size
                 ),
-                action: Some("Set kv_cache_type = \"q8_0\" in config.toml".to_string()),
+                action: Some("Set kv_cache_type_k and kv_cache_type_v = \"q8_0\" in config.toml".to_string()),
             });
         }
 
@@ -302,14 +302,18 @@ impl RequestLogger {
             });
         }
 
-        // GPU backend check
-        if hardware.has_cuda && config.gpu_backend != "cuda" && config.gpu_backend != "auto" {
+        // GPU backend check — only suggest CUDA if Vulkan is underperforming.
+        // Vulkan is preferred for cross-vendor portability (NVIDIA + AMD).
+        if hardware.has_cuda && config.gpu_backend != "cuda" && config.gpu_backend != "auto" && avg_tps < 15.0 {
             suggestions.push(PerformanceSuggestion {
-                severity: "high".to_string(),
+                severity: "low".to_string(),
                 category: "GPU".to_string(),
-                title: "Switch to CUDA backend".to_string(),
-                description: "NVIDIA GPU detected but not using CUDA backend. CUDA typically provides the best performance for NVIDIA hardware.".to_string(),
-                action: Some("Set gpu_backend = \"cuda\" or \"auto\" in config.toml".to_string()),
+                title: "Consider CUDA backend".to_string(),
+                description: format!(
+                    "NVIDIA GPU detected with Vulkan backend at {:.1} t/s. CUDA may offer better performance on NVIDIA, but Vulkan provides cross-vendor support (NVIDIA + AMD).",
+                    avg_tps
+                ),
+                action: Some("Set gpu_backend = \"cuda\" in config.toml (NVIDIA only)".to_string()),
             });
         }
 

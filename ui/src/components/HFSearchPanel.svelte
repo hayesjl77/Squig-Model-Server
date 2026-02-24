@@ -10,6 +10,10 @@
   let autoLoad = $state(true);
   let hardware = $state(null);
 
+  // Speed tracking: store previous poll's downloaded_bytes + timestamp per download key
+  let prevSnapshots = {};
+  let downloadSpeeds = $state({});  // key -> { speed_bps, remaining_bytes }
+
   // Compute the best available memory for inference (VRAM or system RAM)
   function getAvailableMemoryMb() {
     if (!hardware) return null;
@@ -122,6 +126,19 @@
     if (e.key === 'Enter') search();
   }
 
+  // Debounced search-as-you-type
+  let debounceTimer = null;
+  function handleInput() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (!searchQuery.trim()) {
+      searchResults = [];
+      return;
+    }
+    debounceTimer = setTimeout(() => {
+      search();
+    }, 500);
+  }
+
   async function downloadFile(repoId, filename) {
     try {
       if (autoLoad) {
@@ -146,6 +163,27 @@
   async function refreshDownloads() {
     try {
       const res = await api.hfDownloads();
+      const now = Date.now();
+      const newSpeeds = { ...downloadSpeeds };
+      const newSnapshots = {};
+      for (const dl of (res.downloads || [])) {
+        if (dl.status !== 'downloading') continue;
+        const key = `${dl.repo_id}::${dl.filename}`;
+        const prev = prevSnapshots[key];
+        if (prev && now > prev.time) {
+          const dt = (now - prev.time) / 1000; // seconds
+          const db = dl.downloaded_bytes - prev.bytes;
+          const speed = dt > 0 ? Math.max(0, db / dt) : 0;
+          // Smooth: 70% new, 30% old
+          const oldSpeed = newSpeeds[key]?.speed_bps || 0;
+          const smoothed = oldSpeed > 0 ? speed * 0.7 + oldSpeed * 0.3 : speed;
+          const remaining = dl.total_bytes > dl.downloaded_bytes ? dl.total_bytes - dl.downloaded_bytes : 0;
+          newSpeeds[key] = { speed_bps: smoothed, remaining_bytes: remaining };
+        }
+        newSnapshots[key] = { bytes: dl.downloaded_bytes, time: now };
+      }
+      prevSnapshots = newSnapshots;
+      downloadSpeeds = newSpeeds;
       downloads = res.downloads || [];
     } catch (_) {}
   }
@@ -164,6 +202,36 @@
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
     if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
     return n.toString();
+  }
+
+  function formatBytes(bytes) {
+    if (bytes >= 1_073_741_824) return (bytes / 1_073_741_824).toFixed(2) + ' GB';
+    if (bytes >= 1_048_576) return (bytes / 1_048_576).toFixed(1) + ' MB';
+    if (bytes >= 1_024) return (bytes / 1_024).toFixed(0) + ' KB';
+    return bytes + ' B';
+  }
+
+  function formatSpeed(bps) {
+    if (!bps || bps <= 0) return '';
+    if (bps >= 1_073_741_824) return (bps / 1_073_741_824).toFixed(2) + ' GB/s';
+    if (bps >= 1_048_576) return (bps / 1_048_576).toFixed(1) + ' MB/s';
+    if (bps >= 1_024) return (bps / 1_024).toFixed(0) + ' KB/s';
+    return bps.toFixed(0) + ' B/s';
+  }
+
+  function formatEta(remaining, speed) {
+    if (!speed || speed <= 0 || !remaining) return '';
+    const secs = remaining / speed;
+    if (secs < 60) return Math.round(secs) + 's';
+    if (secs < 3600) return Math.round(secs / 60) + 'm ' + Math.round(secs % 60) + 's';
+    const h = Math.floor(secs / 3600);
+    const m = Math.round((secs % 3600) / 60);
+    return h + 'h ' + m + 'm';
+  }
+
+  function getSpeedInfo(repoId, filename) {
+    const key = `${repoId}::${filename}`;
+    return downloadSpeeds[key] || null;
   }
 
   function isDownloading(repoId, filename) {
@@ -218,6 +286,7 @@
         type="text"
         bind:value={searchQuery}
         onkeydown={handleKeydown}
+        oninput={handleInput}
         placeholder="Search HuggingFace for GGUF models... (e.g. Qwen 32B, Llama 3, DeepSeek)"
         class="search-input"
       />
@@ -252,10 +321,18 @@
           </div>
           <div class="dl-progress">
             {#if dl.status === 'downloading'}
+              {@const si = getSpeedInfo(dl.repo_id, dl.filename)}
               <div class="progress-bar">
                 <div class="progress-fill" style="width: {dl.progress_pct}%"></div>
               </div>
               <span class="dl-pct">{dl.progress_pct}%</span>
+              {#if si && si.speed_bps > 0}
+                <span class="dl-speed">{formatSpeed(si.speed_bps)}</span>
+                <span class="dl-remaining">{formatBytes(si.remaining_bytes)} left</span>
+                {#if formatEta(si.remaining_bytes, si.speed_bps)}
+                  <span class="dl-eta">~{formatEta(si.remaining_bytes, si.speed_bps)}</span>
+                {/if}
+              {/if}
               <button onclick={() => cancelDownload(dl.repo_id, dl.filename)} class="btn-sm btn-cancel">Cancel</button>
             {:else if dl.status === 'queued'}
               <span class="dl-status queued">Queued</span>
@@ -333,11 +410,15 @@
                       </td>
                       <td class="file-action">
                         {#if dl && (dl.status === 'downloading' || dl.status === 'queued')}
+                          {@const si2 = dl.status === 'downloading' ? getSpeedInfo(dl.repo_id, dl.filename) : null}
                           <div class="inline-progress">
                             <div class="progress-bar small">
                               <div class="progress-fill" style="width: {dl.progress_pct}%"></div>
                             </div>
                             <span class="dl-pct-sm">{dl.progress_pct}%</span>
+                            {#if si2 && si2.speed_bps > 0}
+                              <span class="dl-speed-sm">{formatSpeed(si2.speed_bps)}</span>
+                            {/if}
                           </div>
                         {:else if dl && dl.status === 'complete'}
                           <span class="dl-done">✓ Done</span>
@@ -474,7 +555,7 @@
   .dl-filename { font-weight: 500; font-size: 0.9rem; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dl-repo { font-size: 0.75rem; color: #666; }
 
-  .dl-progress { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+  .dl-progress { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; flex-wrap: wrap; }
 
   .progress-bar {
     width: 120px;
@@ -493,6 +574,10 @@
 
   .dl-pct { font-size: 0.8rem; color: #6ee7b7; min-width: 38px; text-align: right; }
   .dl-pct-sm { font-size: 0.75rem; color: #6ee7b7; }
+  .dl-speed { font-size: 0.75rem; color: #a78bfa; font-weight: 500; }
+  .dl-speed-sm { font-size: 0.7rem; color: #a78bfa; }
+  .dl-remaining { font-size: 0.75rem; color: #888; }
+  .dl-eta { font-size: 0.75rem; color: #fbbf24; }
 
   .dl-status { font-size: 0.8rem; font-weight: 500; }
   .dl-status.queued { color: #fbbf24; }

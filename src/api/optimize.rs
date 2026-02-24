@@ -85,7 +85,8 @@ CURRENT INFERENCE SETTINGS:
 - parallel_slots: {}
 - flash_attention: {}
 - continuous_batching: {}
-- kv_cache_type: "{}"
+- kv_cache_type_k: "{}" (KV cache key quantization)
+- kv_cache_type_v: "{}" (KV cache value quantization)
 - gpu_backend: "{}"
 - speculative_decoding: {}
 
@@ -106,7 +107,7 @@ RULES:
 - context_size: valid range 512-131072 (powers of 2 preferred)
 - parallel_slots: valid range 1-16
 - gpu_layers: -1 (all) or 0-999 specific count
-- kv_cache_type: "f16", "q8_0", or "q4_0"
+- kv_cache_type_k / kv_cache_type_v: "f16", "q8_0", or "q4_0"
 - gpu_backend: "auto", "cuda", "rocm", "vulkan", "cpu"
 - flash_attention: true or false
 
@@ -140,7 +141,8 @@ Respond with ONLY a valid JSON object (no markdown fences, no text outside the J
         live_settings.parallel_slots,
         live_settings.flash_attention,
         live_settings.continuous_batching,
-        live_settings.kv_cache_type,
+        live_settings.kv_cache_type_k,
+        live_settings.kv_cache_type_v,
         live_settings.gpu_backend,
         live_settings.speculative.enabled,
         perf.total_requests_analyzed,
@@ -168,11 +170,17 @@ Respond with ONLY a valid JSON object (no markdown fences, no text outside the J
         messages: vec![
             crate::api::chat::ChatMessage {
                 role: "system".to_string(),
-                content: system_prompt,
+                content: Some(system_prompt),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
             },
             crate::api::chat::ChatMessage {
                 role: "user".to_string(),
-                content: "Analyze the performance metrics and current settings above. Suggest optimal configuration changes. Respond with JSON only.".to_string(),
+                content: Some("Analyze the performance metrics and current settings above. Suggest optimal configuration changes. Respond with JSON only.".to_string()),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
             },
         ],
         temperature: Some(0.3), // Low temperature for consistent analytical output
@@ -183,6 +191,21 @@ Respond with ONLY a valid JSON object (no markdown fences, no text outside the J
         presence_penalty: None,
         frequency_penalty: None,
         seed: Some(42),
+        top_k: None,
+        min_p: None,
+        repeat_penalty: None,
+        repeat_last_n: None,
+        typical_p: None,
+        mirostat: None,
+        mirostat_tau: None,
+        mirostat_eta: None,
+        grammar: None,
+        response_format: None,
+        dynatemp_range: None,
+        dynatemp_exponent: None,
+        tools: None,
+        tool_choice: None,
+        parallel_tool_calls: None,
     };
 
     match backend.chat_completions(&chat_request).await {
@@ -190,7 +213,7 @@ Respond with ONLY a valid JSON object (no markdown fences, no text outside the J
             let raw_content = response
                 .choices
                 .first()
-                .map(|c| c.message.content.clone())
+                .and_then(|c| c.message.content.clone())
                 .unwrap_or_default();
 
             // Try to parse the model's JSON response
@@ -207,8 +230,13 @@ Respond with ONLY a valid JSON object (no markdown fences, no text outside the J
                     "parallel_slots": live_settings.parallel_slots,
                     "flash_attention": live_settings.flash_attention,
                     "continuous_batching": live_settings.continuous_batching,
-                    "kv_cache_type": live_settings.kv_cache_type,
+                    "kv_cache_type_k": live_settings.kv_cache_type_k,
+                    "kv_cache_type_v": live_settings.kv_cache_type_v,
                     "gpu_backend": live_settings.gpu_backend,
+                    "threads": live_settings.threads,
+                    "batch_size": live_settings.batch_size,
+                    "mlock": live_settings.mlock,
+                    "cache_prompt": live_settings.cache_prompt,
                     "speculative_enabled": live_settings.speculative.enabled,
                 },
                 "performance_summary": {
@@ -345,8 +373,18 @@ pub async fn apply_settings(
             "parallel_slots": state.live_inference.read().parallel_slots,
             "flash_attention": state.live_inference.read().flash_attention,
             "continuous_batching": state.live_inference.read().continuous_batching,
-            "kv_cache_type": state.live_inference.read().kv_cache_type,
+            "kv_cache_type_k": state.live_inference.read().kv_cache_type_k,
+            "kv_cache_type_v": state.live_inference.read().kv_cache_type_v,
             "gpu_backend": state.live_inference.read().gpu_backend,
+            "threads": state.live_inference.read().threads,
+            "threads_batch": state.live_inference.read().threads_batch,
+            "batch_size": state.live_inference.read().batch_size,
+            "ubatch_size": state.live_inference.read().ubatch_size,
+            "mlock": state.live_inference.read().mlock,
+            "no_mmap": state.live_inference.read().no_mmap,
+            "n_predict": state.live_inference.read().n_predict,
+            "cache_prompt": state.live_inference.read().cache_prompt,
+            "warmup": state.live_inference.read().warmup,
             "speculative_enabled": state.live_inference.read().speculative.enabled,
         },
     }))
@@ -361,8 +399,25 @@ pub async fn get_settings(State(state): State<AppState>) -> Json<serde_json::Val
         "parallel_slots": s.parallel_slots,
         "flash_attention": s.flash_attention,
         "continuous_batching": s.continuous_batching,
-        "kv_cache_type": s.kv_cache_type,
+        "kv_cache_type_k": s.kv_cache_type_k,
+        "kv_cache_type_v": s.kv_cache_type_v,
         "gpu_backend": s.gpu_backend,
+        "available_backends": state.inference_manager.available_backends(),
+        "threads": s.threads,
+        "threads_batch": s.threads_batch,
+        "batch_size": s.batch_size,
+        "ubatch_size": s.ubatch_size,
+        "mlock": s.mlock,
+        "no_mmap": s.no_mmap,
+        "n_predict": s.n_predict,
+        "rope_scaling": s.rope_scaling,
+        "rope_freq_base": s.rope_freq_base,
+        "rope_freq_scale": s.rope_freq_scale,
+        "split_mode": s.split_mode,
+        "main_gpu": s.main_gpu,
+        "tensor_split": s.tensor_split,
+        "cache_prompt": s.cache_prompt,
+        "warmup": s.warmup,
         "speculative": {
             "enabled": s.speculative.enabled,
             "draft_model": s.speculative.draft_model,
@@ -417,15 +472,22 @@ fn apply_single_setting(
             live.update(|s| s.continuous_batching = v);
             Ok(format!("continuous_batching: {} → {}", old, v))
         }
-        "kv_cache_type" => {
+        "kv_cache_type_k" | "kv_cache_type_v" => {
             let v = value.as_str().ok_or("Expected string")?;
-            if !["f16", "q8_0", "q4_0"].contains(&v) {
-                return Err("kv_cache_type must be f16, q8_0, or q4_0".to_string());
+            let valid = ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"];
+            if !valid.contains(&v) {
+                return Err(format!("{} must be one of: {}", setting, valid.join(", ")));
             }
-            let old = live.read().kv_cache_type.clone();
             let v_owned = v.to_string();
-            live.update(|s| s.kv_cache_type = v_owned);
-            Ok(format!("kv_cache_type: {} → {}", old, v))
+            if setting == "kv_cache_type_k" {
+                let old = live.read().kv_cache_type_k.clone();
+                live.update(|s| s.kv_cache_type_k = v_owned);
+                Ok(format!("kv_cache_type_k: {} → {}", old, v))
+            } else {
+                let old = live.read().kv_cache_type_v.clone();
+                live.update(|s| s.kv_cache_type_v = v_owned);
+                Ok(format!("kv_cache_type_v: {} → {}", old, v))
+            }
         }
         "gpu_backend" => {
             let v = value.as_str().ok_or("Expected string")?;
@@ -436,6 +498,123 @@ fn apply_single_setting(
             let v_owned = v.to_string();
             live.update(|s| s.gpu_backend = v_owned);
             Ok(format!("gpu_backend: {} → {}", old, v))
+        }
+        "threads" => {
+            let v = value.as_i64().ok_or("Expected integer")? as i32;
+            if v < -1 || v > 256 {
+                return Err("threads must be -1 to 256".to_string());
+            }
+            let old = live.read().threads;
+            live.update(|s| s.threads = v);
+            Ok(format!("threads: {} → {}", old, v))
+        }
+        "threads_batch" => {
+            let v = value.as_i64().ok_or("Expected integer")? as i32;
+            if v < -1 || v > 256 {
+                return Err("threads_batch must be -1 to 256".to_string());
+            }
+            let old = live.read().threads_batch;
+            live.update(|s| s.threads_batch = v);
+            Ok(format!("threads_batch: {} → {}", old, v))
+        }
+        "batch_size" => {
+            let v = value.as_u64().ok_or("Expected positive integer")? as usize;
+            if v < 1 || v > 16384 {
+                return Err("batch_size must be 1-16384".to_string());
+            }
+            let old = live.read().batch_size;
+            live.update(|s| s.batch_size = v);
+            Ok(format!("batch_size: {} → {}", old, v))
+        }
+        "ubatch_size" => {
+            let v = value.as_u64().ok_or("Expected positive integer")? as usize;
+            if v < 1 || v > 8192 {
+                return Err("ubatch_size must be 1-8192".to_string());
+            }
+            let old = live.read().ubatch_size;
+            live.update(|s| s.ubatch_size = v);
+            Ok(format!("ubatch_size: {} → {}", old, v))
+        }
+        "mlock" => {
+            let v = value.as_bool().ok_or("Expected boolean")?;
+            let old = live.read().mlock;
+            live.update(|s| s.mlock = v);
+            Ok(format!("mlock: {} → {}", old, v))
+        }
+        "no_mmap" => {
+            let v = value.as_bool().ok_or("Expected boolean")?;
+            let old = live.read().no_mmap;
+            live.update(|s| s.no_mmap = v);
+            Ok(format!("no_mmap: {} → {}", old, v))
+        }
+        "n_predict" => {
+            let v = value.as_i64().ok_or("Expected integer")? as i32;
+            if v < -1 {
+                return Err("n_predict must be >= -1".to_string());
+            }
+            let old = live.read().n_predict;
+            live.update(|s| s.n_predict = v);
+            Ok(format!("n_predict: {} → {}", old, v))
+        }
+        "rope_scaling" => {
+            let v = value.as_str().ok_or("Expected string")?;
+            if !["", "none", "linear", "yarn"].contains(&v) {
+                return Err("rope_scaling must be empty, none, linear, or yarn".to_string());
+            }
+            let old = live.read().rope_scaling.clone();
+            let v_owned = v.to_string();
+            live.update(|s| s.rope_scaling = v_owned);
+            Ok(format!("rope_scaling: '{}' → '{}'", old, v))
+        }
+        "rope_freq_base" => {
+            let v = value.as_f64().ok_or("Expected number")?;
+            let old = live.read().rope_freq_base;
+            live.update(|s| s.rope_freq_base = v);
+            Ok(format!("rope_freq_base: {} → {}", old, v))
+        }
+        "rope_freq_scale" => {
+            let v = value.as_f64().ok_or("Expected number")?;
+            let old = live.read().rope_freq_scale;
+            live.update(|s| s.rope_freq_scale = v);
+            Ok(format!("rope_freq_scale: {} → {}", old, v))
+        }
+        "split_mode" => {
+            let v = value.as_str().ok_or("Expected string")?;
+            if !["none", "layer", "row"].contains(&v) {
+                return Err("split_mode must be none, layer, or row".to_string());
+            }
+            let old = live.read().split_mode.clone();
+            let v_owned = v.to_string();
+            live.update(|s| s.split_mode = v_owned);
+            Ok(format!("split_mode: {} → {}", old, v))
+        }
+        "main_gpu" => {
+            let v = value.as_i64().ok_or("Expected integer")? as i32;
+            if v < 0 || v > 15 {
+                return Err("main_gpu must be 0-15".to_string());
+            }
+            let old = live.read().main_gpu;
+            live.update(|s| s.main_gpu = v);
+            Ok(format!("main_gpu: {} → {}", old, v))
+        }
+        "tensor_split" => {
+            let v = value.as_str().ok_or("Expected string")?;
+            let old = live.read().tensor_split.clone();
+            let v_owned = v.to_string();
+            live.update(|s| s.tensor_split = v_owned);
+            Ok(format!("tensor_split: '{}' → '{}'", old, v))
+        }
+        "cache_prompt" => {
+            let v = value.as_bool().ok_or("Expected boolean")?;
+            let old = live.read().cache_prompt;
+            live.update(|s| s.cache_prompt = v);
+            Ok(format!("cache_prompt: {} → {}", old, v))
+        }
+        "warmup" => {
+            let v = value.as_bool().ok_or("Expected boolean")?;
+            let old = live.read().warmup;
+            live.update(|s| s.warmup = v);
+            Ok(format!("warmup: {} → {}", old, v))
         }
         _ => Err(format!("Unknown setting: {}", setting)),
     }

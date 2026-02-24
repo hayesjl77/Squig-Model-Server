@@ -29,7 +29,17 @@ export const api = {
     post("/api/models/load", { model }),
   unloadModel: (/** @type {string} */ model) =>
     post("/api/models/unload", { model }),
+  deleteModel: (/** @type {string} */ model) =>
+    post("/api/models/delete", { model }),
   models: () => get("/v1/models"),
+
+  // Live GPU stats
+  gpuStats: () => get("/api/gpu-stats"),
+
+  // Server management
+  serverConfig: () => get("/api/server-config"),
+  unloadAll: () => post("/api/server/unload-all", {}),
+  rescanModels: () => post("/api/server/rescan-models", {}),
 
   // HuggingFace integration
   hfSearch: (/** @type {string} */ q, /** @type {number} */ limit = 20) =>

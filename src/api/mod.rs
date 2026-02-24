@@ -6,6 +6,7 @@ pub mod huggingface;
 pub mod models;
 pub mod management;
 pub mod optimize;
+pub mod web_search;
 
 use axum::{
     Router,
@@ -29,10 +30,15 @@ pub fn management_routes() -> Router<AppState> {
         .route("/health", get(health::health_check))
         .route("/status", get(management::server_status))
         .route("/hardware", get(management::hardware_info))
+        .route("/gpu-stats", get(management::gpu_stats))
+        .route("/server-config", get(management::server_config))
+        .route("/server/unload-all", post(management::unload_all))
+        .route("/server/rescan-models", post(management::rescan_models))
         .route("/models/loaded", get(management::loaded_models))
         .route("/models/load", post(management::load_model))
         .route("/models/unload", post(management::unload_model))
         .route("/models/available", get(management::available_models))
+        .route("/models/delete", post(management::delete_model))
         .route("/metrics", get(management::metrics))
         // HuggingFace integration
         .route("/hf/search", post(huggingface::hf_search))
@@ -50,4 +56,6 @@ pub fn management_routes() -> Router<AppState> {
         .route("/dev/optimize", post(optimize::self_optimize))
         .route("/dev/settings", get(optimize::get_settings))
         .route("/dev/apply-settings", post(optimize::apply_settings))
+        // Web search
+        .route("/web-search", post(web_search::web_search))
 }
