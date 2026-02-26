@@ -32,7 +32,7 @@
       "endpoints": [
         "https://github.com/hayesjl77/Squig-AI-Releases/releases/download/model-server%2Fv0.1.0/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZDNjUzQjBFNTE2OENDMUQKUldRZHpHaFJEanRsYlBNTGVrSEZlMmRLQnp1bzNCaDJJV0QyaXl5Q0NoYTRFcE9HSnJ3Q3pVWUkK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJGODNENEFERkJCQjI4NjcKUldSbktMdjdyZFNEdjJpWloyN3VTbjAwdVRkZnFBSjdXZ3VVZHdzNjZlK2p0eDR5T3BxVGlJK0cK"
     }
   },
   "bundle": {
