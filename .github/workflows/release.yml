@@ -12,6 +12,7 @@ on:
 
 env:
   RELEASE_REPO: hayesjl77/Squig-AI-Releases
+  LLAMA_CPP_REF: master
 
 jobs:
   # ─────────────────────────────────────────────────────────────
@@ -33,7 +34,75 @@ jobs:
             libssl-dev \
             libgtk-3-dev \
             libsoup-3.0-dev \
-            javascriptcoregtk-4.1
+            javascriptcoregtk-4.1 \
+            cmake \
+            ninja-build
+
+      - name: Install Vulkan SDK
+        run: |
+          wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list \
+            https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
+          sudo apt-get update
+          sudo apt-get install -y vulkan-sdk
+
+      - name: Install CUDA Toolkit
+        uses: Jimver/cuda-toolkit@v0.2.19
+        with:
+          cuda: '12.6.3'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart-dev"]'
+
+      - name: Clone llama.cpp
+        run: git clone --depth 1 --branch ${{ env.LLAMA_CPP_REF }} https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp
+
+      - name: Build llama.cpp (Vulkan)
+        run: |
+          cmake -S /tmp/llama.cpp -B /tmp/llama-build-vulkan \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_VULKAN=ON \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_SERVER=ON
+          cmake --build /tmp/llama-build-vulkan --target llama-server -j$(nproc)
+
+      - name: Build llama.cpp (CUDA)
+        run: |
+          cmake -S /tmp/llama.cpp -B /tmp/llama-build-cuda \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_CUDA=ON \
+            -DCMAKE_CUDA_ARCHITECTURES="60;70;75;80;86;89;90" \
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_TESTS=OFF \
+            -DLLAMA_BUILD_SERVER=ON
+          cmake --build /tmp/llama-build-cuda --target llama-server -j$(nproc)
+
+      - name: Bundle llama-server backends
+        run: |
+          mkdir -p src-tauri/llama-backends/vulkan src-tauri/llama-backends/cuda
+
+          cp -L /tmp/llama-build-vulkan/bin/llama-server src-tauri/llama-backends/vulkan/
+          for lib in libllama.so libggml.so libggml-base.so libggml-cpu.so libggml-vulkan.so libmtmd.so; do
+            if [ -f "/tmp/llama-build-vulkan/bin/$lib" ] || [ -L "/tmp/llama-build-vulkan/bin/$lib" ]; then
+              cp -L "/tmp/llama-build-vulkan/bin/$lib" "src-tauri/llama-backends/vulkan/"
+            fi
+          done
+          chmod +x src-tauri/llama-backends/vulkan/llama-server
+
+          cp -L /tmp/llama-build-cuda/bin/llama-server src-tauri/llama-backends/cuda/
+          for lib in libllama.so libggml.so libggml-base.so libggml-cpu.so libggml-cuda.so libmtmd.so; do
+            if [ -f "/tmp/llama-build-cuda/bin/$lib" ] || [ -L "/tmp/llama-build-cuda/bin/$lib" ]; then
+              cp -L "/tmp/llama-build-cuda/bin/$lib" "src-tauri/llama-backends/cuda/"
+            fi
+          done
+          chmod +x src-tauri/llama-backends/cuda/llama-server
+
+          echo "=== Vulkan backend ==="
+          ls -lah src-tauri/llama-backends/vulkan/
+          echo "=== CUDA backend ==="
+          ls -lah src-tauri/llama-backends/cuda/
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -83,6 +152,64 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Vulkan SDK
+        uses: humbletim/install-vulkan-sdk@v1.2.0
+        with:
+          version: latest
+          cache: true
+
+      - name: Install CUDA Toolkit
+        uses: Jimver/cuda-toolkit@v0.2.19
+        with:
+          cuda: '12.6.3'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart-dev", "visual_studio_integration"]'
+
+      - name: Clone llama.cpp
+        run: git clone --depth 1 --branch ${{ env.LLAMA_CPP_REF }} https://github.com/ggerganov/llama.cpp.git C:\llama-cpp
+
+      - name: Build llama.cpp (Vulkan)
+        run: |
+          cmake -S C:\llama-cpp -B C:\llama-build-vulkan `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_VULKAN=ON `
+            -DLLAMA_BUILD_EXAMPLES=OFF `
+            -DLLAMA_BUILD_TESTS=OFF `
+            -DLLAMA_BUILD_SERVER=ON
+          cmake --build C:\llama-build-vulkan --config Release --target llama-server -j $env:NUMBER_OF_PROCESSORS
+
+      - name: Build llama.cpp (CUDA)
+        run: |
+          cmake -S C:\llama-cpp -B C:\llama-build-cuda `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_CUDA=ON `
+            -DCMAKE_CUDA_ARCHITECTURES="60;70;75;80;86;89;90" `
+            -DLLAMA_BUILD_EXAMPLES=OFF `
+            -DLLAMA_BUILD_TESTS=OFF `
+            -DLLAMA_BUILD_SERVER=ON
+          cmake --build C:\llama-build-cuda --config Release --target llama-server -j $env:NUMBER_OF_PROCESSORS
+
+      - name: Bundle llama-server backends
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path src-tauri\llama-backends\vulkan
+          New-Item -ItemType Directory -Force -Path src-tauri\llama-backends\cuda
+
+          $vulkanBin = "C:\llama-build-vulkan\bin\Release"
+          if (-not (Test-Path "$vulkanBin\llama-server.exe")) { $vulkanBin = "C:\llama-build-vulkan\bin" }
+          Copy-Item "$vulkanBin\llama-server.exe" src-tauri\llama-backends\vulkan\
+          Get-ChildItem "$vulkanBin\*.dll" | Copy-Item -Destination src-tauri\llama-backends\vulkan\
+
+          $cudaBin = "C:\llama-build-cuda\bin\Release"
+          if (-not (Test-Path "$cudaBin\llama-server.exe")) { $cudaBin = "C:\llama-build-cuda\bin" }
+          Copy-Item "$cudaBin\llama-server.exe" src-tauri\llama-backends\cuda\
+          Get-ChildItem "$cudaBin\*.dll" | Copy-Item -Destination src-tauri\llama-backends\cuda\
+
+          Write-Output "=== Vulkan backend ==="
+          Get-ChildItem src-tauri\llama-backends\vulkan\
+          Write-Output "=== CUDA backend ==="
+          Get-ChildItem src-tauri\llama-backends\cuda\
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -219,16 +346,20 @@ jobs:
             ## Squig Model Server v${{ steps.tag.outputs.version }}
 
             Run local LLMs with a built-in model manager and OpenAI-compatible API.
+            Includes bundled llama.cpp backends for CUDA (NVIDIA) and Vulkan (AMD/Intel/NVIDIA).
 
             ### Downloads
 
             **Windows**
             - `.exe` — NSIS installer (recommended)
-            - `.msi` — MSI installer (alternative)
 
             **Linux**
             - `.deb` — Debian/Ubuntu package (recommended)
             - `.AppImage` — Universal Linux (run anywhere)
+
+            ### Bundled Backends
+            - **CUDA** — Best performance for NVIDIA GPUs (requires NVIDIA drivers)
+            - **Vulkan** — Universal GPU support (AMD, Intel, NVIDIA)
 
             ### Auto-Update
             Existing installations will detect this update automatically.
