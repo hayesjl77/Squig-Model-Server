@@ -47,10 +47,10 @@ jobs:
           sudo apt-get install -y vulkan-sdk
 
       - name: Install CUDA Toolkit
-        uses: Jimver/cuda-toolkit@v0.2.19
+        uses: Jimver/cuda-toolkit@v0.2.30
         with:
-          cuda: '12.6.3'
-          method: 'network'
+          cuda: "12.6.3"
+          method: "network"
           sub-packages: '["nvcc", "cudart-dev"]'
 
       - name: Clone llama.cpp
@@ -154,16 +154,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Vulkan SDK
-        uses: humbletim/install-vulkan-sdk@v1.2.0
+        uses: humbletim/install-vulkan-sdk@v1.2
         with:
           version: latest
           cache: true
 
       - name: Install CUDA Toolkit
-        uses: Jimver/cuda-toolkit@v0.2.19
+        uses: Jimver/cuda-toolkit@v0.2.30
         with:
-          cuda: '12.6.3'
-          method: 'network'
+          cuda: "12.6.3"
+          method: "network"
           sub-packages: '["nvcc", "cudart-dev", "visual_studio_integration"]'
 
       - name: Clone llama.cpp
