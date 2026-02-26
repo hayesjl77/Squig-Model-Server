@@ -52,6 +52,7 @@ jobs:
           cuda: "12.6.3"
           method: "network"
           sub-packages: '["nvcc", "cudart-dev"]'
+          non-cuda-sub-packages: '["libcublas-dev"]'
 
       - name: Clone llama.cpp
         run: git clone --depth 1 --branch ${{ env.LLAMA_CPP_REF }} https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp
@@ -163,8 +164,7 @@ jobs:
         uses: Jimver/cuda-toolkit@v0.2.30
         with:
           cuda: "12.6.3"
-          method: "network"
-          sub-packages: '["nvcc", "cudart-dev", "visual_studio_integration"]'
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "visual_studio_integration"]'
 
       - name: Clone llama.cpp
         run: git clone --depth 1 --branch ${{ env.LLAMA_CPP_REF }} https://github.com/ggerganov/llama.cpp.git C:\llama-cpp
