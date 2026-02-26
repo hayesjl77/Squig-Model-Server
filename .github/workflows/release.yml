@@ -127,17 +127,14 @@ jobs:
         working-directory: ui
         run: npm run build
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli@2.5.0 --locked
-
       - name: Build Tauri (Linux)
+        uses: tauri-apps/tauri-action@v0
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPIMAGE_EXTRACT_AND_RUN: "1"
-          NO_STRIP: "true"
-        working-directory: src-tauri
-        run: cargo tauri build
+        with:
+          projectPath: src-tauri
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -146,8 +143,6 @@ jobs:
           path: |
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/bundle/deb/*.deb.sig
-            src-tauri/target/release/bundle/appimage/*.AppImage
-            src-tauri/target/release/bundle/appimage/*.AppImage.sig
           if-no-files-found: error
 
   # ─────────────────────────────────────────────────────────────
@@ -251,15 +246,14 @@ jobs:
         working-directory: ui
         run: npm run build
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli@2.5.0 --locked
-
       - name: Build Tauri (Windows)
+        uses: tauri-apps/tauri-action@v0
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        working-directory: src-tauri
-        run: cargo tauri build
+        with:
+          projectPath: src-tauri
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -310,13 +304,13 @@ jobs:
           ENCODED_TAG=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${TAG}', safe=''))")
           REPO_URL="https://github.com/${{ env.RELEASE_REPO }}/releases/download/${ENCODED_TAG}"
 
-          APPIMAGE_SIG=$(cat artifacts/linux-artifacts/src-tauri/target/release/bundle/appimage/*.AppImage.sig 2>/dev/null || echo "")
+          DEB_SIG=$(cat artifacts/linux-artifacts/src-tauri/target/release/bundle/deb/*.deb.sig 2>/dev/null || echo "")
           NSIS_SIG=$(cat artifacts/windows-artifacts/src-tauri/target/release/bundle/nsis/*.nsis.zip.sig 2>/dev/null || echo "")
 
-          APPIMAGE_FILE=$(find artifacts -name "*.AppImage" ! -name "*.sig" -print -quit)
+          DEB_FILE=$(find artifacts -name "*.deb" ! -name "*.sig" -print -quit)
           NSIS_FILE=$(find artifacts -name "*.nsis.zip" ! -name "*.sig" -print -quit)
 
-          APPIMAGE_NAME=$(basename "$APPIMAGE_FILE" | sed 's/ /./g')
+          DEB_NAME=$(basename "$DEB_FILE" | sed 's/ /./g')
           NSIS_NAME=$(basename "$NSIS_FILE" | sed 's/ /./g')
 
           cat > latest.json <<ENDJSON
@@ -326,8 +320,8 @@ jobs:
             "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "platforms": {
               "linux-x86_64": {
-                "signature": "${APPIMAGE_SIG}",
-                "url": "${REPO_URL}/${APPIMAGE_NAME}"
+                "signature": "${DEB_SIG}",
+                "url": "${REPO_URL}/${DEB_NAME}"
               },
               "windows-x86_64": {
                 "signature": "${NSIS_SIG}",
@@ -345,8 +339,6 @@ jobs:
           find artifacts -type f \( \
             -name "*.deb" -o \
             -name "*.deb.sig" -o \
-            -name "*.AppImage" -o \
-            -name "*.AppImage.sig" -o \
             -name "*.exe" -o \
             -name "*.msi" -o \
             -name "*.nsis.zip" -o \
@@ -374,8 +366,7 @@ jobs:
             - `.exe` — NSIS installer (recommended)
 
             **Linux**
-            - `.deb` — Debian/Ubuntu package (recommended)
-            - `.AppImage` — Universal Linux (run anywhere)
+            - `.deb` — Debian/Ubuntu package
 
             ### Bundled Backends
             - **CUDA** — Best performance for NVIDIA GPUs (requires NVIDIA drivers)
