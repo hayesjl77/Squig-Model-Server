@@ -17,14 +17,27 @@
           "identifier": "main-capability",
           "description": "Main window capabilities",
           "windows": ["main"],
-          "permissions": ["core:default", "process:default", "opener:default"]
+          "permissions": [
+            "core:default",
+            "process:default",
+            "opener:default",
+            "updater:default"
+          ]
         }
       ]
     }
   },
-  "plugins": {},
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/hayesjl77/Squig-AI-Releases/releases/download/model-server%2Fv0.1.0/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZDNjUzQjBFNTE2OENDMUQKUldRZHpHaFJEanRsYlBNTGVrSEZlMmRLQnp1bzNCaDJJV0QyaXl5Q0NoYTRFcE9HSnJ3Q3pVWUkK"
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["deb", "appimage", "nsis"],
     "icon": [
       "icons/32x32.png",

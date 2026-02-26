@@ -1,0 +1,237 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "model-server/v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. model-server/v0.1.0)"
+        required: true
+
+env:
+  RELEASE_REPO: hayesjl77/Squig-AI-Releases
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Build Linux (Ubuntu 22.04)
+  # ─────────────────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            javascriptcoregtk-4.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Build UI
+        working-directory: ui
+        run: npm run build
+
+      - name: Build Tauri (Linux)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: src-tauri
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/deb/*.deb.sig
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/appimage/*.AppImage.sig
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────
+  # Build Windows (Server 2022)
+  # ─────────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Build UI
+        working-directory: ui
+        run: npm run build
+
+      - name: Build Tauri (Windows)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: src-tauri
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/nsis/*.nsis.zip
+            src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────
+  # Create release on Squig-AI-Releases repo
+  # ─────────────────────────────────────────────────────────────
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine tag and version
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            FULL_TAG="${{ inputs.tag }}"
+          else
+            FULL_TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${FULL_TAG#model-server/v}"
+          echo "tag=${FULL_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f | head -50
+
+      - name: Generate latest.json for Tauri updater
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${{ steps.tag.outputs.version }}"
+          ENCODED_TAG=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${TAG}', safe=''))")
+          REPO_URL="https://github.com/${{ env.RELEASE_REPO }}/releases/download/${ENCODED_TAG}"
+
+          APPIMAGE_SIG=$(cat artifacts/linux-artifacts/src-tauri/target/release/bundle/appimage/*.AppImage.sig 2>/dev/null || echo "")
+          NSIS_SIG=$(cat artifacts/windows-artifacts/src-tauri/target/release/bundle/nsis/*.nsis.zip.sig 2>/dev/null || echo "")
+
+          APPIMAGE_FILE=$(find artifacts -name "*.AppImage" ! -name "*.sig" -print -quit)
+          NSIS_FILE=$(find artifacts -name "*.nsis.zip" ! -name "*.sig" -print -quit)
+
+          APPIMAGE_NAME=$(basename "$APPIMAGE_FILE" | sed 's/ /./g')
+          NSIS_NAME=$(basename "$NSIS_FILE" | sed 's/ /./g')
+
+          cat > latest.json <<ENDJSON
+          {
+            "version": "${VERSION}",
+            "notes": "Squig Model Server v${VERSION}",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "linux-x86_64": {
+                "signature": "${APPIMAGE_SIG}",
+                "url": "${REPO_URL}/${APPIMAGE_NAME}"
+              },
+              "windows-x86_64": {
+                "signature": "${NSIS_SIG}",
+                "url": "${REPO_URL}/${NSIS_NAME}"
+              }
+            }
+          }
+          ENDJSON
+
+          cat latest.json
+
+      - name: Collect release files
+        run: |
+          mkdir -p release-files
+          find artifacts -type f \( \
+            -name "*.deb" -o \
+            -name "*.deb.sig" -o \
+            -name "*.AppImage" -o \
+            -name "*.AppImage.sig" -o \
+            -name "*.exe" -o \
+            -name "*.msi" -o \
+            -name "*.nsis.zip" -o \
+            -name "*.nsis.zip.sig" \
+          \) -exec cp {} release-files/ \;
+          cp latest.json release-files/
+          ls -la release-files/
+
+      - name: Create GitHub Release on Squig-AI-Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ env.RELEASE_REPO }}
+          token: ${{ secrets.RELEASE_TOKEN }}
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Squig Model Server v${{ steps.tag.outputs.version }}"
+          body: |
+            ## Squig Model Server v${{ steps.tag.outputs.version }}
+
+            Run local LLMs with a built-in model manager and OpenAI-compatible API.
+
+            ### Downloads
+
+            **Windows**
+            - `.exe` — NSIS installer (recommended)
+            - `.msi` — MSI installer (alternative)
+
+            **Linux**
+            - `.deb` — Debian/Ubuntu package (recommended)
+            - `.AppImage` — Universal Linux (run anywhere)
+
+            ### Auto-Update
+            Existing installations will detect this update automatically.
+          draft: false
+          prerelease: false
+          files: release-files/*

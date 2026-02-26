@@ -1,6 +1,7 @@
 pub mod chat;
 pub mod completions;
 pub mod devtools;
+pub mod embeddings;
 pub mod health;
 pub mod huggingface;
 pub mod models;
@@ -20,6 +21,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/chat/completions", post(chat::chat_completions))
         .route("/completions", post(completions::completions))
+        .route("/embeddings", post(embeddings::embeddings))
         .route("/models", get(models::list_models))
         .route("/models/{model_id}", get(models::get_model))
 }

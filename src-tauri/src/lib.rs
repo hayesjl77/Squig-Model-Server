@@ -91,6 +91,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             // Create the window pointing directly at the backend dashboard
             tauri::WebviewWindowBuilder::new(
@@ -106,6 +107,16 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Squig Model Server");
+        .build(tauri::generate_context!())
+        .expect("error while building Squig Model Server")
+        .run(|_app_handle, event| {
+            // When the Tauri app is exiting (window closed, etc.), kill any
+            // llama-server processes that the background Axum thread spawned.
+            // The background thread gets terminated without running its shutdown
+            // handler, so we clean up here.
+            if let tauri::RunEvent::Exit = event {
+                tracing::info!("Tauri exiting — cleaning up llama-server processes...");
+                squig_model_server::inference::InferenceManager::kill_orphan_llama_servers();
+            }
+        });
 }

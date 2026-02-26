@@ -9,6 +9,7 @@ use tokio::process::{Child, Command};
 
 use crate::api::chat::{ChatCompletionRequest, ChatCompletionResponse};
 use crate::api::completions::{CompletionRequest, CompletionResponse};
+use crate::api::embeddings::{EmbeddingRequest, EmbeddingResponse};
 use crate::config::InferenceSettings;
 use crate::models::ModelInfo;
 
@@ -294,6 +295,10 @@ impl InferenceManager {
         // Enable Jinja templates for tool calling support
         cmd.arg("--jinja");
 
+        // Enable embedding endpoint (/v1/embeddings)
+        cmd.arg("--embedding")
+            .arg("--pooling").arg("mean");
+
         // Speculative decoding
         if settings.speculative.enabled && !settings.speculative.draft_model.is_empty() {
             cmd.arg("-md")
@@ -318,6 +323,21 @@ impl InferenceManager {
             backend,
             server_path
         );
+
+        // On Linux: tell the kernel to send SIGKILL to this child if our
+        // process dies for ANY reason (crash, SIGKILL, abort, etc.).
+        // This prevents orphaned llama-server processes.
+        #[cfg(unix)]
+        {
+            // SAFETY: prctl(PR_SET_PDEATHSIG) is async-signal-safe and
+            // only affects the about-to-exec child process.
+            unsafe {
+                cmd.pre_exec(|| {
+                    libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+                    Ok(())
+                });
+            }
+        }
 
         // Suppress stdout/stderr or pipe to tracing
         cmd.stdout(std::process::Stdio::piped());
@@ -438,6 +458,12 @@ impl InferenceManager {
     /// Get the backend for a specific model
     pub async fn get_backend(&self, model_name: &str) -> Option<Arc<ModelBackend>> {
         self.backends.read().get(model_name).cloned()
+    }
+
+    /// Get any available backend (first loaded model). Useful for embeddings
+    /// where the specific model doesn't matter as much as availability.
+    pub async fn get_any_backend(&self) -> Option<Arc<ModelBackend>> {
+        self.backends.read().values().next().cloned()
     }
 
     /// List names of currently loaded models
@@ -669,6 +695,46 @@ impl ModelBackend {
             .json()
             .await
             .context("Failed to parse response")?;
+
+        Ok(response)
+    }
+
+    /// Forward an embedding request to llama-server's /v1/embeddings endpoint
+    pub async fn embeddings(&self, request: &EmbeddingRequest) -> Result<EmbeddingResponse> {
+        let url = format!("{}/v1/embeddings", self.base_url);
+
+        let input = match &request.input {
+            crate::api::embeddings::EmbeddingInput::Single(s) => serde_json::json!(s),
+            crate::api::embeddings::EmbeddingInput::Multiple(v) => serde_json::json!(v),
+        };
+
+        let body = serde_json::json!({
+            "input": input,
+            "model": request.model,
+        });
+
+        let resp = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to reach llama-server for embeddings")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body_text = resp.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "llama-server embedding endpoint returned {}: {}",
+                status,
+                body_text
+            );
+        }
+
+        let response: EmbeddingResponse = resp
+            .json()
+            .await
+            .context("Failed to parse embedding response")?;
 
         Ok(response)
     }

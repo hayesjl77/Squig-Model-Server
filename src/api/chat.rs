@@ -1,5 +1,6 @@
 use axum::{
     extract::State,
+    http::StatusCode,
     response::{
         sse::Sse,
         IntoResponse, Json,
@@ -212,33 +213,33 @@ pub async fn chat_completions(
                     Ok(()) => match state.inference_manager.get_backend(&model_name).await {
                         Some(b) => b,
                         None => {
-                            return Err(Json(serde_json::json!({
+                            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
                                 "error": {
                                     "message": "Model loaded but backend unavailable",
                                     "type": "server_error",
                                     "code": "model_error"
                                 }
-                            })));
+                            }))));
                         }
                     },
                     Err(e) => {
-                        return Err(Json(serde_json::json!({
+                        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
                             "error": {
                                 "message": format!("Failed to load model: {}", e),
                                 "type": "server_error",
                                 "code": "model_load_error"
                             }
-                        })));
+                        }))));
                     }
                 }
             } else {
-                return Err(Json(serde_json::json!({
+                return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({
                     "error": {
                         "message": format!("Model '{}' not found", model_name),
                         "type": "invalid_request_error",
                         "code": "model_not_found"
                     }
-                })));
+                }))));
             }
         }
     };
@@ -333,13 +334,13 @@ pub async fn chat_completions(
 
                 Ok(Sse::new(logging_stream).into_response())
             }
-            Err(e) => Err(Json(serde_json::json!({
+            Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
                 "error": {
                     "message": format!("Inference error: {}", e),
                     "type": "server_error",
                     "code": "inference_error"
                 }
-            }))),
+            })))),
         }
     } else {
         // Forward non-streaming request
@@ -409,13 +410,13 @@ pub async fn chat_completions(
                     response_body: Some(format!("Error: {}", e)),
                 });
 
-                Err(Json(serde_json::json!({
+                Err((StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
                     "error": {
                         "message": format!("Inference error: {}", e),
                         "type": "server_error",
                         "code": "inference_error"
                     }
-                })))
+                }))))
             }
         }
     }

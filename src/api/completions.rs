@@ -1,4 +1,4 @@
-use axum::{extract::State, response::IntoResponse, Json};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 
 use crate::server::AppState;
@@ -47,26 +47,26 @@ pub async fn completions(
     let backend = match state.inference_manager.get_backend(&request.model).await {
         Some(b) => b,
         None => {
-            return Json(serde_json::json!({
+            return (StatusCode::NOT_FOUND, Json(serde_json::json!({
                 "error": {
                     "message": format!("Model '{}' not loaded", request.model),
                     "type": "invalid_request_error",
                     "code": "model_not_found"
                 }
-            }))
+            })))
             .into_response();
         }
     };
 
     match backend.completions(&request).await {
         Ok(response) => Json(response).into_response(),
-        Err(e) => Json(serde_json::json!({
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
             "error": {
                 "message": format!("Inference error: {}", e),
                 "type": "server_error",
                 "code": "inference_error"
             }
-        }))
+        })))
         .into_response(),
     }
 }
