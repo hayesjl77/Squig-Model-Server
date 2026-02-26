@@ -169,17 +169,56 @@ jobs:
       - name: Clone llama.cpp
         run: git clone --depth 1 --branch ${{ env.LLAMA_CPP_REF }} https://github.com/ggerganov/llama.cpp.git C:\llama-cpp
 
-      - name: Build llama.cpp (Vulkan)
+      - name: Debug Vulkan SDK layout
+        shell: pwsh
         run: |
-          cmake -S C:\llama-cpp -B C:\llama-build-vulkan `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DGGML_VULKAN=ON `
-            -DLLAMA_BUILD_EXAMPLES=OFF `
-            -DLLAMA_BUILD_TESTS=OFF `
-            -DLLAMA_BUILD_SERVER=ON
+          Write-Output "VULKAN_SDK=$env:VULKAN_SDK"
+          if (Test-Path $env:VULKAN_SDK) {
+            Get-ChildItem -Path $env:VULKAN_SDK -Recurse -Depth 3 | Select-Object FullName
+          } else {
+            Write-Output "VULKAN_SDK path does not exist!"
+          }
+          # Also check standard Windows install path
+          if (Test-Path "C:\VulkanSDK") {
+            Get-ChildItem -Path "C:\VulkanSDK" -Recurse -Depth 3 | Select-Object FullName
+          }
+
+      - name: Build llama.cpp (Vulkan)
+        shell: pwsh
+        run: |
+          # Locate Vulkan include dir and library
+          $sdk = $env:VULKAN_SDK
+          Write-Output "Using VULKAN_SDK=$sdk"
+          $includeDir = $null
+          $libPath = $null
+          # Check standard layout ($VULKAN_SDK/Include + $VULKAN_SDK/Lib)
+          if (Test-Path "$sdk/Include/vulkan") { $includeDir = "$sdk/Include" }
+          elseif (Test-Path "$sdk/include/vulkan") { $includeDir = "$sdk/include" }
+          if (Test-Path "$sdk/Lib/vulkan-1.lib") { $libPath = "$sdk/Lib/vulkan-1.lib" }
+          elseif (Test-Path "$sdk/lib/vulkan-1.lib") { $libPath = "$sdk/lib/vulkan-1.lib" }
+          $cmakeArgs = @(
+            "-S", "C:\llama-cpp",
+            "-B", "C:\llama-build-vulkan",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DGGML_VULKAN=ON",
+            "-DLLAMA_BUILD_EXAMPLES=OFF",
+            "-DLLAMA_BUILD_TESTS=OFF",
+            "-DLLAMA_BUILD_SERVER=ON",
+            "-DCMAKE_PREFIX_PATH=$sdk"
+          )
+          if ($includeDir) {
+            Write-Output "Found Vulkan include at: $includeDir"
+            $cmakeArgs += "-DVulkan_INCLUDE_DIR=$includeDir"
+          }
+          if ($libPath) {
+            Write-Output "Found Vulkan library at: $libPath"
+            $cmakeArgs += "-DVulkan_LIBRARY=$libPath"
+          }
+          cmake @cmakeArgs
           cmake --build C:\llama-build-vulkan --config Release --target llama-server -j $env:NUMBER_OF_PROCESSORS
 
       - name: Build llama.cpp (CUDA)
+        shell: pwsh
         run: |
           cmake -S C:\llama-cpp -B C:\llama-build-cuda `
             -DCMAKE_BUILD_TYPE=Release `
