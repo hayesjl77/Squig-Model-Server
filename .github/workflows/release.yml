@@ -127,16 +127,17 @@ jobs:
         working-directory: ui
         run: npm run build
 
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli@2.5.0 --locked
+
       - name: Build Tauri (Linux)
-        uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
-        with:
-          projectPath: src-tauri
+        working-directory: src-tauri
+        run: cargo tauri build
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -250,14 +251,15 @@ jobs:
         working-directory: ui
         run: npm run build
 
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli@2.5.0 --locked
+
       - name: Build Tauri (Windows)
-        uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          projectPath: src-tauri
+        working-directory: src-tauri
+        run: cargo tauri build
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
