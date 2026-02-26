@@ -200,6 +200,27 @@ impl InferenceManager {
         // Build llama-server command - resolve the right binary for the requested backend
         let server_path = self.resolve_server_path(&settings.gpu_backend)?;
         let mut cmd = Command::new(&server_path);
+
+        // Set LD_LIBRARY_PATH / PATH so llama-server finds its co-located shared libraries
+        if let Some(server_dir) = std::path::Path::new(&server_path).parent() {
+            let server_dir_str = server_dir.to_string_lossy();
+            #[cfg(unix)]
+            {
+                let existing = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
+                let new_ld_path = if existing.is_empty() {
+                    server_dir_str.to_string()
+                } else {
+                    format!("{}:{}", server_dir_str, existing)
+                };
+                cmd.env("LD_LIBRARY_PATH", new_ld_path);
+            }
+            #[cfg(windows)]
+            {
+                let existing = std::env::var("PATH").unwrap_or_default();
+                cmd.env("PATH", format!("{};{}", server_dir_str, existing));
+            }
+        }
+
         cmd.arg("-m")
             .arg(&model.path)
             .arg("--host")
@@ -741,11 +762,49 @@ impl ModelBackend {
 }
 
 /// Discover llama-server binaries in known build directories.
-/// Looks for build-<backend>/bin/llama-server patterns next to a llama.cpp source dir.
+/// Checks bundled resources first (Tauri app), then local build directories.
 fn discover_llama_servers() -> HashMap<String, String> {
     let mut found = HashMap::new();
 
-    // Build directory patterns: (backend_name, relative_build_dir)
+    #[cfg(windows)]
+    let server_bin = "llama-server.exe";
+    #[cfg(not(windows))]
+    let server_bin = "llama-server";
+
+    // 1. Check bundled resources (Tauri packages these next to the binary)
+    //    Layout: <exe_dir>/llama-backends/<backend>/llama-server
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            let backends = ["vulkan", "cuda", "rocm", "cpu"];
+
+            for backend in &backends {
+                let path = exe_dir.join(format!("llama-backends/{}/{}", backend, server_bin));
+                if path.exists() {
+                    let abs_str = path.to_string_lossy().into_owned();
+                    found.entry(backend.to_string()).or_insert_with(|| {
+                        tracing::info!("Found bundled {} backend: {}", backend, abs_str);
+                        abs_str
+                    });
+                }
+            }
+
+            // Also check resourcesPath for Tauri (may be nested under resources/)
+            for parent in [exe_dir, exe_dir.parent().unwrap_or(exe_dir)] {
+                for backend in &backends {
+                    let path = parent.join(format!("resources/llama-backends/{}/{}", backend, server_bin));
+                    if path.exists() && !found.contains_key(*backend) {
+                        let abs_str = path.to_string_lossy().into_owned();
+                        found.entry(backend.to_string()).or_insert_with(|| {
+                            tracing::info!("Found bundled {} backend (resources): {}", backend, abs_str);
+                            abs_str
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Check local build directory patterns (dev mode / source builds)
     let patterns = [
         ("vulkan", "llama.cpp/build/bin/llama-server"),
         ("vulkan", "../llama.cpp/build/bin/llama-server"),

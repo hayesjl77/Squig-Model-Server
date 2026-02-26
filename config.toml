@@ -8,14 +8,15 @@ api_key = ""
 # Directories to scan for GGUF model files
 # Add as many as you need - subdirectories are scanned recursively
 directories = [
-    "/home/hayesjl77/.squig-models",
+    # Add directories containing your GGUF model files
+    # "~/.squig-models",
     # "/mnt/models",
     # "C:\\Users\\you\\models",
 ]
 
 # Model to auto-load on startup (filename or partial match)
 # Leave empty to not auto-load
-default_model = "qwen2.5-3b-instruct-q4_k_m"
+default_model = ""
 
 # Maximum number of models loaded simultaneously
 # Each model runs its own llama-server process
@@ -102,9 +103,10 @@ llama_server_path = ""
 # Per-backend llama-server binary paths
 # Each backend gets its own build of llama.cpp compiled with the
 # appropriate GPU acceleration flag.
+# Leave empty to use bundled backends (recommended) or auto-discovery.
 [inference.backend_paths]
-vulkan = "/mnt/Apps/Squig AI 2026/llama.cpp/build/bin/llama-server"
-cuda = "/mnt/Apps/Squig AI 2026/llama.cpp/build-cuda/bin/llama-server"
+# vulkan = "/path/to/llama.cpp/build/bin/llama-server"
+# cuda = "/path/to/llama.cpp/build-cuda/bin/llama-server"
 
 [inference.speculative]
 # Speculative decoding uses a small "draft" model to predict tokens,

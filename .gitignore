@@ -25,6 +25,12 @@ Thumbs.db
 *.msi
 *.exe
 
+# Bundled llama-server binaries (CI populates these; keep .gitkeep)
+src-tauri/llama-backends/*/llama-server
+src-tauri/llama-backends/*/llama-server.exe
+src-tauri/llama-backends/*/*.so
+src-tauri/llama-backends/*/*.dll
+
 # Tauri generated
 src-tauri/gen/
 
