@@ -8,10 +8,7 @@ api_key = ""
 # Directories to scan for GGUF model files
 # Add as many as you need - subdirectories are scanned recursively
 directories = [
-    # Add directories containing your GGUF model files
-    # "~/.squig-models",
-    # "/mnt/models",
-    # "C:\\Users\\you\\models",
+    "~/.squig-models",
 ]
 
 # Model to auto-load on startup (filename or partial match)
@@ -105,8 +102,8 @@ llama_server_path = ""
 # appropriate GPU acceleration flag.
 # Leave empty to use bundled backends (recommended) or auto-discovery.
 [inference.backend_paths]
-# vulkan = "/path/to/llama.cpp/build/bin/llama-server"
-# cuda = "/path/to/llama.cpp/build-cuda/bin/llama-server"
+vulkan = "/home/hayesjl77/Apps/Squig AI 2026/llama.cpp/build/bin/llama-server"
+# cuda = "/home/hayesjl77/Apps/Squig AI 2026/llama.cpp/build-cuda/bin/llama-server"
 
 [inference.speculative]
 # Speculative decoding uses a small "draft" model to predict tokens,

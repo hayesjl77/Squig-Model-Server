@@ -2,6 +2,9 @@
 
 > Standalone desktop application for running local LLMs — similar to LM Studio. Single binary, cross-platform (Linux & Windows), built-in model management, and an OpenAI-compatible API.
 
+> [!IMPORTANT]
+> **This is a standalone native desktop application only.** It must never be deployed or run as a web application, cloud service, or browser-hosted instance. It manages local GPU resources, spawns llama-server sidecar processes, and binds to `127.0.0.1` — all of which require direct access to the host machine's hardware. Running it behind a web frontend or exposing it to the public internet is unsupported and a security risk.
+
 ## Architecture
 
 ```
