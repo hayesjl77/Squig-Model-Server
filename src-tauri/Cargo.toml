@@ -1,6 +1,6 @@
 [package]
 name = "squig-model-server-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "Squig Model Server - Desktop App"
 authors = ["Squig-AI"]
 license = "MIT"

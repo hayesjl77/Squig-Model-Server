@@ -176,7 +176,8 @@ impl InferenceManager {
     }
 
     /// Load a model by spawning a llama-server process.
-    /// Settings are automatically tuned via smart defaults to fit the model in available memory.
+    /// If smart_defaults is enabled, settings are automatically tuned to fit the model in available memory.
+    /// If disabled, user settings are passed through unchanged.
     pub async fn load_model(&self, model: ModelInfo, settings: &InferenceSettings) -> Result<()> {
         let model_name = model.name.clone();
 
@@ -186,8 +187,14 @@ impl InferenceManager {
             return Ok(());
         }
 
-        // Compute smart defaults based on model size vs hardware
-        let settings = &compute_smart_settings(&model, settings);
+        // Apply smart defaults only if enabled; otherwise use user settings as-is
+        let settings = if settings.smart_defaults {
+            compute_smart_settings(&model, settings)
+        } else {
+            tracing::info!("Smart defaults disabled — using user settings as-is for '{}'", model_name);
+            settings.clone()
+        };
+        let settings = &settings;
 
         // Allocate port
         let port = {

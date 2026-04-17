@@ -40,6 +40,7 @@
   let tensorSplit = $state('');
   let cachePrompt = $state(true);
   let warmup = $state(true);
+  let smartDefaults = $state(true);
 
   // Hardware detection
   let cpuCores = $state(0);
@@ -80,6 +81,7 @@
       tensorSplit = s.tensor_split ?? '';
       cachePrompt = s.cache_prompt ?? true;
       warmup = s.warmup ?? true;
+      smartDefaults = s.smart_defaults ?? true;
 
       // Hardware info
       cpuCores = hw.cpu_cores || 0;
@@ -125,6 +127,7 @@
     if (tensorSplit !== settings.tensor_split) changes.push({ setting: 'tensor_split', value: tensorSplit });
     if (cachePrompt !== settings.cache_prompt) changes.push({ setting: 'cache_prompt', value: cachePrompt });
     if (warmup !== settings.warmup) changes.push({ setting: 'warmup', value: warmup });
+    if (smartDefaults !== settings.smart_defaults) changes.push({ setting: 'smart_defaults', value: smartDefaults });
     return changes;
   }
 
@@ -189,6 +192,7 @@
     tensorSplit = settings.tensor_split;
     cachePrompt = settings.cache_prompt;
     warmup = settings.warmup;
+    smartDefaults = settings.smart_defaults;
     settingsDirty = false;
     settingsSuccess = '';
     settingsError = '';
@@ -286,6 +290,26 @@
       {/if}
 
       <div class="tuning-grid">
+        <!-- Smart Defaults Toggle -->
+        <div class="tuning-card smart-defaults-card" title="Smart Defaults: When enabled, the server automatically adjusts inference settings (context size, GPU layers, KV cache, etc.) based on your hardware and model size to prevent OOM crashes. Disable this to use your own settings exactly as configured.">
+          <div class="tc-header">
+            <label class="tc-label" for="smart-defaults">Smart Defaults</label>
+            <span class="tc-value" style="color: {smartDefaults ? '#6ee7b7' : '#fbbf24'}">{smartDefaults ? 'ON' : 'OFF'}</span>
+          </div>
+          <p class="tc-desc">
+            {#if smartDefaults}
+              Settings below are <strong>auto-tuned</strong> on model load based on your hardware. Your values act as hints that may be adjusted.
+            {:else}
+              Settings below are used <strong>exactly as configured</strong>. Make sure your hardware can handle them or the model may fail to load.
+            {/if}
+          </p>
+          <label class="toggle-switch">
+            <input type="checkbox" id="smart-defaults" bind:checked={smartDefaults} onchange={markDirty} />
+            <span class="toggle-slider"></span>
+            <span class="toggle-text">{smartDefaults ? 'Auto-tune enabled' : 'Manual mode'}</span>
+          </label>
+        </div>
+
         <!-- GPU Layers -->
         <div class="tuning-card" title="GPU Layers: Number of transformer layers offloaded to GPU VRAM. More layers = faster inference but more VRAM used. Set to -1 to offload all layers. Independent of model quantization. Impact: Increasing moves computation from CPU to GPU for faster speed; decreasing frees VRAM but slows inference. Requires model reload.">
           <div class="tc-header">
@@ -770,6 +794,51 @@
     border: 1px solid #1e1e30;
     border-radius: 8px;
     padding: 0.5rem 0.7rem;
+  }
+  .smart-defaults-card {
+    grid-column: 1 / -1;
+    border-color: #2a2a40;
+    background: #0a0a16;
+  }
+  /* Toggle switch */
+  .toggle-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-switch input { display: none; }
+  .toggle-slider {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background: #333;
+    border-radius: 10px;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: #888;
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .toggle-switch input:checked + .toggle-slider {
+    background: #1a3a2a;
+  }
+  .toggle-switch input:checked + .toggle-slider::after {
+    transform: translateX(16px);
+    background: #6ee7b7;
+  }
+  .toggle-text {
+    font-size: 0.75rem;
+    color: #9a9ab0;
   }
   .tc-header {
     display: flex;

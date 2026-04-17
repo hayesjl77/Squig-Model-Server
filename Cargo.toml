@@ -1,6 +1,6 @@
 [package]
 name = "squig-model-server"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Standalone desktop app for running local LLMs with built-in model management and OpenAI-compatible API"
 license = "MIT"

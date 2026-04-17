@@ -116,6 +116,11 @@ pub struct InferenceSettings {
     #[serde(default = "default_true")]
     pub warmup: bool,
 
+    /// Enable smart defaults that auto-tune settings based on hardware/model size.
+    /// When disabled, user settings are passed through unchanged.
+    #[serde(default = "default_true")]
+    pub smart_defaults: bool,
+
     /// Path to llama.cpp server binary (auto-detected if empty)
     /// DEPRECATED: Use backend_paths instead. Kept for backwards compatibility.
     #[serde(default)]
@@ -194,6 +199,7 @@ impl Default for ServerConfig {
                 tensor_split: String::new(),
                 cache_prompt: true,
                 warmup: true,
+                smart_defaults: true,
                 llama_server_path: String::new(),
                 backend_paths: HashMap::new(),
             },

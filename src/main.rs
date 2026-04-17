@@ -75,7 +75,7 @@ async fn main() -> Result<()> {
 fn print_banner(cfg: &config::ServerConfig) {
     println!();
     println!("{}", "╔══════════════════════════════════════════╗".bright_cyan());
-    println!("{}", "║       Squig Model Server  v0.1.0        ║".bright_cyan());
+    println!("{}", "║       Squig Model Server  v0.2.0        ║".bright_cyan());
     println!("{}", "╚══════════════════════════════════════════╝".bright_cyan());
     println!();
     println!(

@@ -385,6 +385,7 @@ pub async fn apply_settings(
             "n_predict": state.live_inference.read().n_predict,
             "cache_prompt": state.live_inference.read().cache_prompt,
             "warmup": state.live_inference.read().warmup,
+            "smart_defaults": state.live_inference.read().smart_defaults,
             "speculative_enabled": state.live_inference.read().speculative.enabled,
         },
     }))
@@ -418,6 +419,7 @@ pub async fn get_settings(State(state): State<AppState>) -> Json<serde_json::Val
         "tensor_split": s.tensor_split,
         "cache_prompt": s.cache_prompt,
         "warmup": s.warmup,
+        "smart_defaults": s.smart_defaults,
         "speculative": {
             "enabled": s.speculative.enabled,
             "draft_model": s.speculative.draft_model,
@@ -615,6 +617,12 @@ fn apply_single_setting(
             let old = live.read().warmup;
             live.update(|s| s.warmup = v);
             Ok(format!("warmup: {} → {}", old, v))
+        }
+        "smart_defaults" => {
+            let v = value.as_bool().ok_or("Expected boolean")?;
+            let old = live.read().smart_defaults;
+            live.update(|s| s.smart_defaults = v);
+            Ok(format!("smart_defaults: {} → {}", old, v))
         }
         _ => Err(format!("Unknown setting: {}", setting)),
     }
